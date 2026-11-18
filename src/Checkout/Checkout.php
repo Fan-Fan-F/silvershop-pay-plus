@@ -151,7 +151,12 @@ class Checkout
         $methods = GatewayInfo::getSupportedGateways();
         reset($methods);
         $method = count($methods) === 1 ? key($methods) : ShopTools::getSession()->get('Checkout.PaymentMethod');
-        if ($nice && isset($methods[$method])) {
+        if ($method && !isset($methods[$method])) {
+            ShopTools::getSession()->clear('Checkout.PaymentMethod');
+            $method = count($methods) > 0 ? (string) key($methods) : null;
+        }
+
+        if ($nice && $method && isset($methods[$method])) {
             return $methods[$method];
         }
 

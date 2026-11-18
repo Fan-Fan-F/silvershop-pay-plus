@@ -54,7 +54,7 @@ class OrderTotalCalculator
 
         //check if modifiers are even in use
         if (!is_array($modifierclasses) || $modifierclasses === []) {
-            return $runningtotal;
+            return round($runningtotal, (int) Order::config()->get('rounding_precision'));
         }
 
         $modifierclasses = array_unique($modifierclasses);
@@ -112,7 +112,7 @@ class OrderTotalCalculator
 
         //prevent negative sales from ever occurring
         if ($runningtotal < 0) {
-            $this->logger->error(
+            $this->logger?->error(
                 "Order (ID = {$this->order->ID}) was calculated to equal {$runningtotal}.\n
                 Order totals should never be negative!\n
                 The order total was set to $0"
@@ -121,7 +121,7 @@ class OrderTotalCalculator
             $runningtotal = 0;
         }
 
-        return $runningtotal;
+        return round($runningtotal, (int) Order::config()->get('rounding_precision'));
     }
 
     /**

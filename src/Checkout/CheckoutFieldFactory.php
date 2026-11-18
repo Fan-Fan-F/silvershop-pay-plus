@@ -109,12 +109,12 @@ class CheckoutFieldFactory
 
     public function getPaymentMethodFields(): OptionsetField
     {
-        //TODO: only get one field if there is no option
+        $gateways = GatewayInfo::getSupportedGateways();
         return OptionsetField::create(
             'PaymentMethod',
             _t('SilverShop\Checkout\CheckoutField.PaymentType', "Payment Type"),
-            GatewayInfo::getSupportedGateways(),
-            array_keys(GatewayInfo::getSupportedGateways())
+            $gateways,
+            (string) key($gateways)
         )->addExtraClass('silvershop-payment-method');
     }
 

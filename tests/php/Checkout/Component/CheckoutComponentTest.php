@@ -200,6 +200,7 @@ final class CheckoutComponentTest extends SapphireTest
             $ns . '-BillingAddress_State',
             $ns . '-BillingAddress_City',
             $ns . '-BillingAddress_Address',
+            $ns . '-Payment_PaymentMethod',
         ];
         $this->assertSame(
             $requiredfields,
@@ -239,7 +240,7 @@ final class CheckoutComponentTest extends SapphireTest
 
         // Test required fields validation
         $this->assertEquals(
-            11,
+            12,
             count($singlePageCheckoutComponentConfig->getRequiredFields()),
             'Component should have required fields'
         );
@@ -320,6 +321,7 @@ final class CheckoutComponentTest extends SapphireTest
             $ns . '-BillingAddress_State',
             $ns . '-BillingAddress_City',
             $ns . '-BillingAddress_Address',
+            $ns . '-Payment_PaymentMethod',
         ];
         $this->assertSame(
             $requiredfieldswithCountryAbsent,

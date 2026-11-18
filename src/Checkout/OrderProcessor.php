@@ -149,24 +149,24 @@ class OrderProcessor
             $customData,
             [
                 'transactionId'    => $transactionId,
-                'firstName'        => $this->order->FirstName,
-                'lastName'         => $this->order->Surname,
-                'email'            => $this->order->Email,
-                'company'          => $billing->Company,
-                'billingAddress1'  => $billing->Address,
-                'billingAddress2'  => $billing->AddressLine2,
-                'billingCity'      => $billing->City,
-                'billingPostcode'  => $billing->PostalCode,
-                'billingState'     => $billing->State,
-                'billingCountry'   => $billing->Country,
-                'billingPhone'     => $billing->Phone,
-                'shippingAddress1' => $shipping->Address,
-                'shippingAddress2' => $shipping->AddressLine2,
-                'shippingCity'     => $shipping->City,
-                'shippingPostcode' => $shipping->PostalCode,
-                'shippingState'    => $shipping->State,
-                'shippingCountry'  => $shipping->Country,
-                'shippingPhone'    => $shipping->Phone,
+                'firstName'        => (string) $this->order->FirstName,
+                'lastName'         => (string) $this->order->Surname,
+                'email'            => (string) $this->order->Email,
+                'company'          => $billing?->Company,
+                'billingAddress1'  => $billing?->Address,
+                'billingAddress2'  => $billing?->AddressLine2,
+                'billingCity'      => $billing?->City,
+                'billingPostcode'  => $billing?->PostalCode,
+                'billingState'     => $billing?->State,
+                'billingCountry'   => $billing?->Country,
+                'billingPhone'     => $billing?->Phone,
+                'shippingAddress1' => $shipping?->Address,
+                'shippingAddress2' => $shipping?->AddressLine2,
+                'shippingCity'     => $shipping?->City,
+                'shippingPostcode' => $shipping?->PostalCode,
+                'shippingState'    => $shipping?->State,
+                'shippingCountry'  => $shipping?->Country,
+                'shippingPhone'    => $shipping?->Phone,
             ]
         );
     }
@@ -280,7 +280,7 @@ class OrderProcessor
         }
 
         //update status
-        if ($this->order->TotalOutstanding(false) !== 0.0) {
+        if ($this->order->TotalOutstanding(false) > 0.0001) {
             $this->order->setStatus('Unpaid', 'placed_unpaid');
         } else {
             $this->order->setStatus('Paid', 'placed_paid');
@@ -288,7 +288,12 @@ class OrderProcessor
 
         if (!$this->order->Placed) {
             $this->order->setField('Placed', DBDatetime::now()->Rfc2822()); //record placed order datetime
-            $this->order->IPAddress = Controller::curr()->getRequest()->getIP(); //record client IP
+            $curr = Controller::curr();
+            $clientIp = $curr?->getRequest()?->getIP();
+            if (!$clientIp && isset($_SERVER['REMOTE_ADDR'])) {
+                $clientIp = (string) $_SERVER['REMOTE_ADDR'];
+            }
+            $this->order->IPAddress = $clientIp ?? '127.0.0.1'; //record client IP
         }
 
         // Add an error handler that throws an exception upon error, so that we can catch errors as exceptions

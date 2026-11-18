@@ -49,6 +49,50 @@ class PaymentExtension extends Extension
         }
     }
 
+    public function onRefunded(ServiceResponse $response): void
+    {
+        /** @var Order $order */
+        $owner = $this->getOwner();
+        $order = Order::get()->byID($owner->OrderID);
+        if ($order && $order->exists()) {
+            if ($order->TotalPaid() <= 0.0001) {
+                $order->setStatus('Refunded', 'payment_refunded');
+            } else {
+                $order->recordTransition('payment_partial_refund');
+            }
+            $order->extend('onPaymentRefunded', $owner, $response);
+            $order->write();
+        }
+    }
+
+    public function onVoid(ServiceResponse $response): void
+    {
+        /** @var Order $order */
+        $owner = $this->getOwner();
+        $order = Order::get()->byID($owner->OrderID);
+        if ($order && $order->exists()) {
+            if ($order->TotalPaidOrAuthorized() <= 0.0001 && !$order->IsCart()) {
+                $order->setStatus('AdminCancelled', 'payment_voided');
+            } else {
+                $order->recordTransition('payment_voided');
+            }
+            $order->extend('onPaymentVoided', $owner, $response);
+            $order->write();
+        }
+    }
+
+    public function onCancelled(): void
+    {
+        /** @var Order $order */
+        $owner = $this->getOwner();
+        $order = Order::get()->byID($owner->OrderID);
+        if ($order && $order->exists()) {
+            $order->recordTransition('payment_cancelled');
+            $order->extend('onPaymentCancelled', $owner);
+            $order->write();
+        }
+    }
+
     protected function placeOrder(): void
     {
         // ensure order is being reloaded from DB, to prevent dealing with stale data!

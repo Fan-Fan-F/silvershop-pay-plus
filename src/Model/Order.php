@@ -91,7 +91,7 @@ class Order extends DataObject
         'ReceiptSent' => 'Datetime', //receipt emailed to customer
         'Printed' => 'Datetime',
         'Dispatched' => 'Datetime', //products have been sent to customer
-        'Status' => "Enum('Unpaid,Paid,Processing,Sent,Complete,AdminCancelled,MemberCancelled,Cart','Cart')",
+        'Status' => "Enum('Unpaid,Paid,Processing,Refunded,Sent,Complete,AdminCancelled,MemberCancelled,Cart','Cart')",
         //customer (for guest orders)
         'FirstName' => 'Varchar',
         'Surname' => 'Varchar',
@@ -189,6 +189,7 @@ class Order extends DataObject
         'Paid',
         'Unpaid',
         'Processing',
+        'Refunded',
         'Sent',
         'Complete',
         'MemberCancelled',
@@ -531,6 +532,23 @@ class Order extends DataObject
     }
 
     /**
+     * Calculate total refunded amount for this order.
+     */
+    public function TotalRefunded(): float
+    {
+        $refunded = 0.0;
+        if ($payments = $this->Payments()) {
+            foreach ($payments as $payment) {
+                if ($payment->Status === 'Refunded') {
+                    $refunded += abs((float) $payment->Amount);
+                }
+            }
+        }
+
+        return round($refunded, (int) static::config()->get('rounding_precision'));
+    }
+
+    /**
      * Get the order status. This will return a localized value if available.
      *
      * @return string the payment status
@@ -596,7 +614,8 @@ class Order extends DataObject
             return false;
         }
 
-        return $this->TotalOutstanding(true) > 0 && empty($this->Paid);
+        $allowZero = static::config()->get('allow_zero_order_total') && $this->GrandTotal() == 0;
+        return ($this->TotalOutstanding(true) > 0 || $allowZero) && empty($this->Paid);
     }
 
     /**
@@ -857,6 +876,27 @@ class Order extends DataObject
         $this->pendingTransitionName = $transitionName;
         $this->setField('Status', $value);
         return $this;
+    }
+
+    /**
+     * Record an audit transition even when the status field remains the same (e.g. partial refund, payment void).
+     */
+    public function recordTransition(string $transitionName, ?string $toStatus = null): void
+    {
+        if (!$this->config()->get('audit_status_transitions') || !$this->isInDB()) {
+            return;
+        }
+
+        $currentStatus = (string) $this->Status;
+        $targetStatus = $toStatus ?? $currentStatus;
+
+        $transition = OrderTransition::create();
+        $transition->OrderID = (int) $this->ID;
+        $transition->FromStatus = $currentStatus;
+        $transition->ToStatus = $targetStatus;
+        $transition->TransitionName = $transitionName;
+        $transition->MemberID = (int) Security::getCurrentUser()?->ID;
+        $transition->write();
     }
 
     /**

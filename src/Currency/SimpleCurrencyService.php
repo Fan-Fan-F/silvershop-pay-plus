@@ -43,14 +43,16 @@ class SimpleCurrencyService implements CurrencyService
      */
     private static array $exchange_rates = [];
 
-    public function convert(float $price, string $from, string $to): float
+    public function convert(float $price, string $from, string $to, ?int $precision = null): float
     {
         if ($from === $to) {
-            return $price;
+            return $precision !== null ? round($price, $precision) : $price;
         }
 
         $rate = $this->getExchangeRate($from, $to);
-        return $price * $rate;
+        $converted = $price * $rate;
+
+        return $precision !== null ? round($converted, $precision) : $converted;
     }
 
     public function getActiveCurrency(): string

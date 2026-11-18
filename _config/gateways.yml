@@ -1,0 +1,40 @@
+---
+Name: silvershop-gateways
+After: silvershop-config
+---
+
+# Mainstream payment gateways configuration template for SilverShop Pay Plus
+# Supports Stripe, PayPal Express/REST, Mollie, and offline Manual payments.
+# To activate in your application, ensure the appropriate omnipay driver is installed
+# and set the allowed gateways in your app config or environment.
+
+SilverStripe\Omnipay\GatewayInfo:
+  Stripe:
+    use_authorize: false
+    is_offsite: true
+    parameters:
+      apiKey: '`STRIPE_API_KEY`'
+      publishableKey: '`STRIPE_PUBLISHABLE_KEY`'
+  PayPal_Express:
+    use_authorize: false
+    is_offsite: true
+    parameters:
+      username: '`PAYPAL_EXPRESS_USERNAME`'
+      password: '`PAYPAL_EXPRESS_PASSWORD`'
+      signature: '`PAYPAL_EXPRESS_SIGNATURE`'
+      testMode: true
+  PayPal_Rest:
+    use_authorize: false
+    is_offsite: true
+    parameters:
+      clientId: '`PAYPAL_REST_CLIENT_ID`'
+      secret: '`PAYPAL_REST_SECRET`'
+      testMode: true
+  Mollie:
+    use_authorize: false
+    is_offsite: true
+    parameters:
+      apiKey: '`MOLLIE_API_KEY`'
+  Manual:
+    is_manual: true
+    use_authorize: false

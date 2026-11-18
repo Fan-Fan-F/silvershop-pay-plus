@@ -9,6 +9,8 @@ use SilverStripe\Dev\SapphireTest;
 
 final class ShopToolsTest extends SapphireTest
 {
+    protected $usesDatabase = true;
+
     protected function setUp(): void
     {
         parent::setUp();

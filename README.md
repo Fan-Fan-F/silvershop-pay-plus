@@ -1,105 +1,179 @@
-# SilverShop Module
+# SilverShop Pay Plus (`silvershop-pay-plus`)
 
-The SilverShop module aims to provide developers with a framework for building, and customising ecommerce-based projects.
-It includes facilities for customers to browse products and place orders, and for administrators to manage products and orders.
-We've put a strong focus on testing. You can see the [![build status](https://github.com/silvershop/silvershop-core/actions/workflows/ci.yml/badge.svg)](https://github.com/silvershop/silvershop-core/actions/workflows/ci.yml) of this project, running on MySQL, SQLite, Postgres, as well as a few different versions of PHP.
+> 增强型 SilverStripe 电商与多网关结账系统 / Enhanced SilverStripe Ecommerce & Multi-Gateway Checkout Framework.
 
-[![Latest Stable Version](https://poser.pugx.org/silvershop/core/v/stable.png)](https://packagist.org/packages/silvershop/core)
-[![Latest Unstable Version](https://poser.pugx.org/silvershop/core/v/unstable.png)](https://packagist.org/packages/silvershop/core)
-[![CI](https://github.com/silvershop/silvershop-core/actions/workflows/ci.yml/badge.svg)](https://github.com/silvershop/silvershop-core/actions/workflows/ci.yml)
-[![Code Coverage](https://scrutinizer-ci.com/g/silvershop/silvershop-core/badges/coverage.png?s=1abe84b468ef3d96646a0546954adba8131d6459)](https://scrutinizer-ci.com/g/silvershop/silvershop-core/)
-[![Scrutinizer Quality Score](https://scrutinizer-ci.com/g/silvershop/silvershop-core/badges/quality-score.png?s=d60753d6cca3817e80aca3dbb79eb5bd4140c981)](https://scrutinizer-ci.com/g/silvershop/silvershop-core/)
-[![Total Downloads](https://poser.pugx.org/silvershop/core/downloads.png)](https://packagist.org/packages/silvershop/core)
+---
 
-* Website: http://www.silvershop.io
-* Demo: https://demo.silvershop.io
+## 简体中文
 
-Your contributions, and feedback are welcomed and appreciated. There are many ways you can [contribute to this project](https://github.com/silvershop/silvershop-core/wiki/Contributing).
-A tremendous thanks to [everyone that has already contributed](https://github.com/silvershop/silvershop-core/graphs/contributors).
+### 简介
+`silvershop-pay-plus` 是基于成熟 SilverStripe 电商框架 `silvershop/silvershop-core` 进行深度二次开发的增强版本。本项目重点针对已知缺陷、多主流支付网关适配（Stripe、PayPal、Mollie 等）、结账表单验证、全生命周期退款与审计追踪，以及金额计算精度进行了系统级重构与加固。
 
+### 功能与改进点（对应 CHANGES.md）
 
-## Requirements
+1. **修复结账支付组件已知 Bug 与空安全/表单验证缺陷**：
+   - 修正 `Payment::getRequiredFields()` 中多网关存在时的必填校验逻辑反转，确保多渠道场景下顾客必须显式选择支付方式。
+   - 修复 `Payment::getFormFields()` 与 `CheckoutFieldFactory` 中把数组当做标量传给 `OptionsetField` 默认值的缺陷，规范选中值绑定。
+   - 在 `OrderProcessor::getGatewayData()` 中增加空安全回退，彻底解决无收发货地址（如虚拟物品、数字服务）场景下访问 `$billing->Company` 或 `$shipping->Address` 导致的 PHP 8 致命异常。
+   - 增强 `OrderProcessor::placeOrder()` 在无 HTTP 控制器上下文（如 CLI 脚本、异步队列 Worker、单元测试）下的环境回退与 IP 记录。
+   - 在 `OnsitePayment` 中增加信用卡数据格式清洗，去除空格与连字符后再执行 Luhn 校验，防止空键与格式误判。
 
- * SilverStripe ^6 [framework](https://github.com/silverstripe/silverstripe-framework) & [cms](https://github.com/silverstripe/silverstripe-cms)
- * [Omnipay Module](https://github.com/burnbright/silverstripe-omnipay) + its dependencies.
+2. **主流支付网关注册体系与元数据管理**：
+   - 新增 `PaymentGatewayRegistry` 核心服务，集中注册与管理主流网关（Stripe、PayPal Express / REST、Mollie、银行转账/Manual、测试 Dummy）。
+   - 提供标准化网关元数据接口（显示名、图标类名、徽标标签、支持币种与跳转模式），使结账模板可直接优雅渲染网关图标。
+   - 新增 `_config/gateways.yml` 配置模板，简化 Omnipay 参数绑定与环境变量对接。
+   - 在 `Checkout::getSelectedPaymentMethod()` 中引入失效/下线网关的自动检测与安全重置。
 
-See `composer.json` for exact set of dependencies.
+3. **补齐支付全生命周期事件与退款/撤销审计状态流转**：
+   - 在 `PaymentExtension` 中新增 `onRefunded` 事件回调，全额退款时将订单状态流转至 `Refunded`，部分退款时记录 `payment_partial_refund`。
+   - 补齐 `onVoid` 与 `onCancelled` 生命周期钩子，分别记录 `payment_voided` 与 `payment_cancelled` 结构化审计流转。
+   - 在 `Order` 模型新增 `TotalRefunded()` 方法，便于后台及报表精准核算退款净额。
+   - 修正下单金额状态判定，避免因浮点精度或微额多付被误标为 `Unpaid`。
 
-* For a SilverStripe 4.x and 5.x compatible version, please use 3.0 or 3.1.
-* For a SilverStripe 3.x compatible version, please use a 2.x release.
+4. **结账金额计算与多币种转换精度优化**：
+   - 增强 `OrderTotalCalculator`，强制应用配置的 `rounding_precision`（默认 2 位），避免多税率/运费叠加时的浮点累积漂移；增加日志服务空安全调用。
+   - `SimpleCurrencyService::convert()` 增加可选精度控制参数，消除跨币种运算产生的超长微额小数。
+   - 完善零元订单（`allow_zero_order_total` 且 `GrandTotal() == 0`）在 `Order::canPay()` 中的结账放行逻辑。
 
-## Stay up to date / get in touch
+### 快速开始
 
-* [Planning Trello Board](https://trello.com/b/85ZyINqI/silvershop-development-planning)
-* [Roadmap](ROADMAP.md)
-* Live chat on Gitter! [![Gitter](https://badges.gitter.im/Join Chat.svg)](https://gitter.im/silvershop/silvershop-core?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-* [Twitter](https://twitter.com/silvershopcore)
+#### 环境要求
+- PHP ^8.3
+- SilverStripe CMS ^6.0
+- MySQL / MariaDB 10.11+
 
-## Documentation
-
- * https://github.com/silvershop/silvershop-core/blob/master/docs/en/index.md - for Developers
- * https://github.com/silvershop/silvershop-core/blob/master/docs_user/en/index.md - for Users
-
-## Installation Instructions
-
-To install SilverShop using [composer](http://doc.silverstripe.org/framework/en/installation/composer), run the following command:
-
-```
+#### 1. 安装
+在 SilverStripe 项目中通过 Composer 引入：
+```bash
 composer require silvershop/core
 ```
 
-### Build Tasks
-
-There are a few useful tasks that can be run via a url to help you test:
-
- * `{yoursite.com}/dev/tasks/PopulateShopTask` - will create cart, checkout, account, category and product pages
- * `{yoursite.com}/dev/tasks/PopulateCartTask` - will add products to the cart, and navitate you to the checkout
-
-## Configuration
-
-You can view various configuration options in the 'example_config.yml' file.
-
-### Frontend CSS (optional)
-
-SilverShop Layout templates include bundled CSS under `client/dist/css/` (shared design tokens in `silvershop-base.css`, plus page-specific files such as `product.css`, `cart.css`, and `checkout.css`). To **disable** those styles and rely entirely on your theme or build pipeline, set:
-
+#### 2. 配置支付网关
+在项目的 `app/_config/gateways.yml` 中配置所需启用的支付网关（例如 Stripe、PayPal 或 Manual）：
 ```yaml
-SilverShop\View\ShopFrontendAssetConfig:
-  include_default_styles: false
+SilverStripe\Omnipay\Model\Payment:
+  allowed_gateways:
+    - Stripe
+    - PayPal_Express
+    - Manual
+
+SilverStripe\Omnipay\GatewayInfo:
+  Stripe:
+    use_authorize: false
+    is_offsite: true
+    parameters:
+      apiKey: '`STRIPE_API_KEY`'
+      publishableKey: '`STRIPE_PUBLISHABLE_KEY`'
 ```
 
-When disabled, templates skip `<% require css(...) %>` for those storefront styles only. JavaScript for cart JSON controls, checkout behaviour (session keep-alive, address-book toggle, payment method panels, AJAX helpers), and CMS requirements are unchanged.
-
-### Offsite payment gateways (e.g. PayPal Express) lose the session on return in CMS6
-
-SilverStripe CMS6 changed the default session cookie SameSite attribute to Strict. This means
-the browser will not send the session cookie when the user is redirected back from an external
-payment provider, resulting in a new empty session and a broken checkout flow.
-
-To fix this, set `cookie_samesite` to `None` or `'Lax'` in your project's session config:
-
-```yaml
-SilverStripe\Control\Session:
-  cookie_samesite: None # Required for offsite payment gateways (PayPal Express etc) to preserve session on return
-# or
-  cookie_samesite: 'Lax' # Required for offsite payment gateways (PayPal Express etc) to preserve session on return
+#### 3. 运行构建与测试数据任务
+在浏览器或终端执行数据库构建：
+```bash
+# 浏览器访问：http://yoursite.local/dev/build?flush=1
+# 或终端运行：
+vendor/bin/sake dev/build "flush=1"
 ```
 
-`SameSite=None` requires the cookie to be sent over HTTPS — SilverStripe enforces the Secure flag
-automatically when this setting is used, so no additional config is needed. This was not an
-issue in CMS5, which did not default to Strict.
+测试环境可运行自带填充任务：
+```bash
+vendor/bin/sake dev/tasks/PopulateShopTask
+```
 
-## Core Features
+#### 4. 运行自测
+```bash
+composer lint
+composer test
+```
 
- * Product Catalog - Products extend Page, and can be browsed within Product Category pages.
- * Product Variations - Sell predefined combinations (e.g. size × colour), created with a one-click, non-destructive matrix generator. See [Product Variations](docs/en/03_How_It_Works/Product_Variations.md).
- * Cart Page - For viewing and updating your cart.
- * Checkout - Gather delivery/billing details and anything specific to the order. Can be single-page or multi-step.
- * Online Payments - Via the omnipay module.
- * Administration - Manage orders in the CMS. Products and categories are edited through the site tree, or in a dedicated Catalog section with [silvershop/productcatalog](https://github.com/silvershop/silvershop-productcatalog).
+### 来源与致谢
+本项目基于 [silvershop-core](https://github.com/silvershop/silvershop-core) 二次开发，原项目由 silvershop 以 BSD-2-Clause 许可证开源。
 
-Futher functionality is provided by add-on submodules.
+### 许可证
+沿用原许可证，全文见根目录 [LICENSE](LICENSE)。
 
-## Add-on Sub Modules
+---
 
-Don't reinvent the wheel! Get additional pre-built functionality with sub modules. All additional functional will be tagged on [packgist](https://packagist.org/search/?q=silvershop) as #silvershop
+## English
+
+### Introduction
+`silvershop-pay-plus` is an enhanced distribution of `silvershop/silvershop-core`, the premier ecommerce framework for SilverStripe CMS. This project delivers substantive enhancements focused on critical bug fixes, mainstream payment gateway integration (Stripe, PayPal, Mollie), checkout validation hardening, full-lifecycle refund & void audit trails, and multi-currency calculation precision.
+
+### Key Features & Improvements (from CHANGES.md)
+
+1. **Checkout & Payment Component Bug Fixes & Null-Safety**:
+   - Inverted and fixed required-field logic in `Payment::getRequiredFields()`: `PaymentMethod` is now strictly required when multiple gateways are available.
+   - Fixed `OptionsetField` initialization in `Payment::getFormFields()` and `CheckoutFieldFactory` by passing the scalar selected key instead of an array of all gateway keys.
+   - Added null-safe property access in `OrderProcessor::getGatewayData()` to prevent fatal PHP 8 errors when handling orders without shipping or billing addresses (e.g. virtual products or digital services).
+   - Added safe fallback for client IP resolution in `OrderProcessor::placeOrder()` when invoked outside an HTTP controller context (e.g. CLI commands, queue workers, unit tests).
+   - Sanitized credit card inputs in `OnsitePayment::validateData()` before running Luhn validation, avoiding undefined index warnings and format validation failures.
+
+2. **Mainstream Payment Gateway Registry & Metadata Management**:
+   - Introduced `PaymentGatewayRegistry` to centrally manage mainstream gateways (Stripe, PayPal Express/REST, Mollie, Manual/Bank Transfer, Dummy).
+   - Provided rich metadata (titles, icons, badge labels, supported currencies, gateway type) for streamlined checkout UI rendering.
+   - Added `_config/gateways.yml` configuration template for standard Omnipay environment bindings.
+   - Sanitized stored session gateway selections in `Checkout::getSelectedPaymentMethod()`, automatically resetting stale or disabled gateways.
+
+3. **Full Lifecycle Payment Events & Refund/Void Audit Trails**:
+   - Implemented `onRefunded` in `PaymentExtension`: transitions order status to `Refunded` upon full refund and logs a structured `OrderTransition` (`payment_refunded`).
+   - Implemented `onVoid` and `onCancelled` lifecycle hooks to track authorization voids and payment cancellations in the audit trail.
+   - Added `TotalRefunded()` calculation method to the `Order` model for accurate financial reporting.
+   - Optimized `OrderProcessor::placeOrder()` status evaluation to use a threshold check instead of strict float comparison (`!== 0.0`), preventing erroneous `Unpaid` statuses due to micro-discrepancies.
+
+4. **Order Total Calculation & Currency Precision Optimization**:
+   - Enforced `rounding_precision` directly in `OrderTotalCalculator::calculate()` to prevent fractional cumulative rounding drift across multi-step modifiers; added null-safe logging.
+   - Added optional precision parameter to `SimpleCurrencyService::convert()` to eliminate long floating-point artifacts during cross-currency checkout.
+   - Streamlined zero-dollar order checkout in `Order::canPay()` when `allow_zero_order_total` is enabled.
+
+### Quick Start
+
+#### Requirements
+- PHP ^8.3
+- SilverStripe CMS ^6.0
+- MySQL / MariaDB 10.11+
+
+#### 1. Installation
+Install into your SilverStripe project via Composer:
+```bash
+composer require silvershop/core
+```
+
+#### 2. Configuration
+Configure payment gateways in your project's `app/_config/gateways.yml`:
+```yaml
+SilverStripe\Omnipay\Model\Payment:
+  allowed_gateways:
+    - Stripe
+    - PayPal_Express
+    - Manual
+
+SilverStripe\Omnipay\GatewayInfo:
+  Stripe:
+    use_authorize: false
+    is_offsite: true
+    parameters:
+      apiKey: '`STRIPE_API_KEY`'
+      publishableKey: '`STRIPE_PUBLISHABLE_KEY`'
+```
+
+#### 3. Build Database & Populate Demo Data
+Run database rebuild via sake CLI or browser:
+```bash
+vendor/bin/sake dev/build "flush=1"
+```
+
+To populate demo shop data:
+```bash
+vendor/bin/sake dev/tasks/PopulateShopTask
+```
+
+#### 4. Running Tests
+```bash
+composer lint
+composer test
+```
+
+### Sources & Acknowledgements
+This project is a rework based on [silvershop-core](https://github.com/silvershop/silvershop-core), originally open-sourced by silvershop under the BSD-2-Clause license.
+
+### License
+Released under the original BSD-2-Clause license. See [LICENSE](LICENSE) for full details.

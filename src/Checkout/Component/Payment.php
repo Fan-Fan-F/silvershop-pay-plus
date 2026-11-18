@@ -20,12 +20,16 @@ class Payment extends CheckoutComponent
         $fieldList = FieldList::create();
         $gateways = GatewayInfo::getSupportedGateways();
         if (count($gateways) > 1) {
+            $selected = Checkout::get($order)->getSelectedPaymentMethod();
+            if (!$selected || !isset($gateways[$selected])) {
+                $selected = (string) key($gateways);
+            }
             $fieldList->push(
                 OptionsetField::create(
                     'PaymentMethod',
                     _t("SilverShop\Checkout\CheckoutField.PaymentType", "Payment Type"),
                     $gateways,
-                    array_keys($gateways)
+                    $selected
                 )->addExtraClass('silvershop-payment-method')
             );
         }
@@ -42,10 +46,10 @@ class Payment extends CheckoutComponent
     public function getRequiredFields(Order $order): array
     {
         if (count(GatewayInfo::getSupportedGateways()) > 1) {
-            return [];
+            return ['PaymentMethod'];
         }
 
-        return ['PaymentMethod'];
+        return [];
     }
 
     public function validateData(Order $order, array $data): bool
@@ -82,5 +86,15 @@ class Payment extends CheckoutComponent
         }
 
         return $order;
+    }
+
+    /**
+     * Get enriched metadata for all supported payment gateways (icons, descriptions, badges).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function getGatewayMetadata(): array
+    {
+        return \SilverShop\Checkout\PaymentGatewayRegistry::getSupportedGatewaysWithMeta();
     }
 }
